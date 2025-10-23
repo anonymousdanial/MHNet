@@ -136,11 +136,14 @@ class VGGFeatureExtractor(nn.Module):
         x = self.block4(x)
         return self.block5(x)
 
+def backbone():
+    return VGGFeatureExtractor(model_name='vgg16', pretrained=True)
 
-# Example usage
+
+
 if __name__ == "__main__":
     # Create the feature extractor
-    vgg_features = VGGFeatureExtractor(model_name='vgg16', pretrained=True)
+    vgg_features = backbone()
     vgg_features.eval()
     
     # Create dummy input (batch_size=2, channels=3, height=224, width=224)
