@@ -147,18 +147,7 @@ if __name__ == "__main__":
     x = torch.randn(2, 3, 224, 224)
     
     # Method 1: Get all feature maps at once
-    print("Method 1: Get all features")
+    print("Get all features")
     features = vgg_features(x, return_all=True)
     for name, feat in features.items():
         print(f"{name}: {feat.shape}")
-    
-    print("\nMethod 2: Get individual block features")
-    # Method 2: Get features from individual blocks
-    block1_feat = vgg_features.get_block1(x)
-    print(f"block1: {block1_feat.shape}")
-    
-    block3_feat = vgg_features.get_block3(x)
-    print(f"block3: {block3_feat.shape}")
-    
-    block5_feat = vgg_features.get_block5(x)
-    print(f"block5: {block5_feat.shape}")
