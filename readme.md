@@ -1,0 +1,1 @@
+python3 train.py --batch_size 1 --epochs 1 --device cuda --save-name first
