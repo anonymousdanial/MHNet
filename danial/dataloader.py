@@ -119,3 +119,83 @@ if __name__ == "__main__":
     # Load single image
     img = load_image('/Users/dania/code/fyp/MHNet/assets/RR.png')
     print(f"Single image shape: {img}")  # (1, 3, 224, 224)
+
+
+class SegmentationDataset(Dataset):
+    """
+    Dataset that returns (image_tensor, mask_tensor) pairs for segmentation.
+
+    - Images and masks are paired by basename (image.jpg <-> image.png).
+    - Masks are converted to single-channel float tensors in {0,1} and
+      returned with shape (1, H, W) to be compatible with BCEWithLogitsLoss.
+    """
+
+    def __init__(self, image_dir, mask_dir, target_size=(224, 224), normalize_imagenet=True,
+                 image_extensions=('.jpg', '.jpeg', '.png', '.bmp', '.tiff'),
+                 mask_extensions=('.png', '.bmp', '.tiff')):
+        self.image_dir = image_dir
+        self.mask_dir = mask_dir
+        self.target_size = target_size
+        self.normalize_imagenet = normalize_imagenet
+
+        self.image_extensions = image_extensions
+        self.mask_extensions = mask_extensions
+
+        # collect images and masks and pair by basename
+        images = {}
+        for fname in os.listdir(image_dir):
+            if fname.lower().endswith(image_extensions):
+                images[os.path.splitext(fname)[0]] = os.path.join(image_dir, fname)
+
+        masks = {}
+        for fname in os.listdir(mask_dir):
+            if fname.lower().endswith(mask_extensions):
+                masks[os.path.splitext(fname)[0]] = os.path.join(mask_dir, fname)
+
+        # keep only basenames present in both
+        common = sorted([b for b in images.keys() if b in masks.keys()])
+
+        if len(common) == 0:
+            raise ValueError(f"No matching image/mask pairs found in {image_dir} and {mask_dir}")
+
+        self.pairs = [(images[b], masks[b]) for b in common]
+        print(f"Found {len(self.pairs)} image-mask pairs")
+
+        # ImageNet stats
+        self.mean = np.array([0.485, 0.456, 0.406])
+        self.std = np.array([0.229, 0.224, 0.225])
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        img_path, mask_path = self.pairs[idx]
+
+        # load image
+        img = Image.open(img_path).convert('RGB')
+        img = img.resize((self.target_size[1], self.target_size[0]), Image.BILINEAR)
+        img_array = np.array(img).astype(np.float32) / 255.0
+
+        if self.normalize_imagenet:
+            img_array = (img_array - self.mean) / self.std
+
+        img_array = np.transpose(img_array, (2, 0, 1))
+        img_tensor = torch.from_numpy(img_array).float()
+
+        # load mask as grayscale
+        mask = Image.open(mask_path).convert('L')
+        # For masks, use nearest interpolation to avoid introducing intermediate values
+        mask = mask.resize((self.target_size[1], self.target_size[0]), Image.NEAREST)
+        mask_array = np.array(mask).astype(np.float32)
+
+        # Binarize mask: any non-zero pixel becomes 1.0
+        mask_array = (mask_array > 0).astype(np.float32)
+
+        # Convert to (1, H, W)
+        mask_array = np.expand_dims(mask_array, axis=0)
+        mask_tensor = torch.from_numpy(mask_array).float()
+
+        return img_tensor, mask_tensor
+
+    def get_dataloader(self, batch_size=32, shuffle=False, num_workers=0):
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
