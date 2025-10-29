@@ -27,7 +27,7 @@ class Model(nn.Module):
         self.conv_f3 = conv_f3.F3Conv(in_channels=256, out_channels=128)
         
         # PRM
-        self.prm = perm.PRM(f3_channels=128, spg_channels=32, fused_channels=128)
+        self.prm = perm.PRM(f3_channels=128, spg_channels=256, fused_channels=128)
         
         # PreFCS
         self.pre_fcs = pre_fcs.PreFCS()
