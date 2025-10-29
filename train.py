@@ -22,8 +22,8 @@ def main():
 	net = model.Model().to(device)
 
 	# Create data loader for training data (COD10K-v2)
-	train_image_dir = '/home/ubd/23b6034/MHNet/dasatet/COD10k-v2/Train/Images/Image'
-	train_mask_dir = '/home/ubd/23b6034/MHNet/dasatet/COD10k-v2/Train/GT_Objects/GT_Object'
+	train_image_dir = 'dasatet/COD10k-v2/Train/Images/Image'
+	train_mask_dir = 'dasatet/COD10k-v2/Train/GT_Objects/GT_Object'
 	train_dataset = dataloader.SegmentationDataset(
 		image_dir=train_image_dir,
 		mask_dir=train_mask_dir,
