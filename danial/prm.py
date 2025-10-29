@@ -103,7 +103,7 @@ class PRM(nn.Module):
 # ----- Quick test -----
 if __name__ == "__main__":
     F3_conv = torch.randn(1, 128, 28, 28)  # F3 already convoluted
-    F25 = torch.randn(1, 32, 112, 112)     # SPG output
-    model = PRM(f3_channels=128, spg_channels=32, fused_channels=128)
+    F25 = torch.randn(1, 256, 112, 112)     # SPG output
+    model = PRM(f3_channels=128, spg_channels=256, fused_channels=128)
     out = model(F3_conv, F25)
     print("PRM output shape:", out.shape)

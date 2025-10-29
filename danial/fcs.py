@@ -16,7 +16,7 @@ class CRFCS(nn.Module):
         boundary_channels (int): Number of channels in the boundary feature map (default: 512)
     """
     
-    def __init__(self, roi_channels=512, boundary_channels=512):
+    def __init__(self, roi_channels=64, boundary_channels=512):
         super(CRFCS, self).__init__()
         
         # 1x1 convolution to generate masked feature map
@@ -131,21 +131,24 @@ class CRFCS(nn.Module):
 # Example usage
 if __name__ == "__main__":
     # Create module
-    crfcs = CRFCS(roi_channels=512, boundary_channels=512)
+    crfcs = CRFCS(roi_channels=64, boundary_channels=64)
     
     # Example inputs
-    batch_size = 4
-    channels = 512
-    height, width = 38, 38
+    batch_size = 1
+    channels = 64
+    roi_height, roi_width = 7, 7  # ROI features are typically 7x7
+    boundary_height, boundary_width = 56, 56  # Boundary features can be larger
     
-    roi_features = torch.randn(batch_size, channels, height, width)
-    boundary_features = torch.randn(batch_size, channels, height, width)
+    roi_features = torch.randn(batch_size, channels, roi_height, roi_width)
+    boundary_features = torch.randn(batch_size, channels, boundary_height, boundary_width)
     
     # Forward pass
-    recovered = crfcs(roi_features, boundary_features)
+    cls_out, reg_out, recovered = crfcs(roi_features, boundary_features)
     
     print(f"Input ROI features shape: {roi_features.shape}")
     print(f"Boundary features shape: {boundary_features.shape}")
+    print(f"Classification output shape: {cls_out.shape}")
+    print(f"Regression output shape: {reg_out.shape}")
     print(f"Recovered features shape: {recovered.shape}")
     
     # Visualize reverse attention

@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SelectiveWeightedAttention(nn.Module):
+class SubjectPerceptionGathering(nn.Module):
     def __init__(self, in_channels1=64, in_channels2=256, compress_channels=32, gaussian_kernel_size=3):
-        super(SelectiveWeightedAttention, self).__init__()
+        super(SubjectPerceptionGathering, self).__init__()
 
         # Step 1: channel compression
         self.gr1 = nn.Conv2d(in_channels1, compress_channels, kernel_size=1)
@@ -67,12 +67,59 @@ class SelectiveWeightedAttention(nn.Module):
 
         return out
 
+class SPGWithFPN(nn.Module):
+    def __init__(self, in_channels1=64, in_channels2=256, prior_channels=256):
+        super().__init__()
+        self.swa = SubjectPerceptionGathering(
+            in_channels1=in_channels1,
+            in_channels2=in_channels2,
+            compress_channels=32,
+            gaussian_kernel_size=3
+        )
+        self.prior_channels = prior_channels
 
+        # FPN bottom-up (3 levels)
+        self.C1 = nn.Conv2d(32, 128, kernel_size=3, padding=1)
+        self.C2 = nn.Conv2d(128, 256, kernel_size=3, padding=1, stride=2)
+        self.C3 = nn.Conv2d(256, prior_channels, kernel_size=3, padding=1, stride=2)
+
+        # Lateral connections
+        self.lateral_p3 = nn.Conv2d(prior_channels, prior_channels, 1)
+        self.lateral_p2 = nn.Conv2d(256, prior_channels, 1)
+        self.lateral_p1 = nn.Conv2d(128, prior_channels, 1)
+
+        # Output conv
+        self.out_conv = nn.Conv2d(prior_channels * 3, prior_channels, 1)
+
+    def forward(self, F1, F2):
+        # Step 1: Get coarse perception
+        coarse = self.swa(F1, F2)  # (B, 32, H, W)
+
+        # Step 2: Bottom-up path
+        c1 = self.C1(coarse)
+        c2 = self.C2(c1)
+        c3 = self.C3(c2)
+
+        # Step 3: Top-down path
+        p3 = self.lateral_p3(c3)
+        p2 = self.lateral_p2(c2) + F.interpolate(p3, size=c2.shape[2:], mode='nearest')
+        p1 = self.lateral_p1(c1) + F.interpolate(p2, size=c1.shape[2:], mode='nearest')
+
+        # Step 4: Unify scales and concat
+        # Upsample all pyramid outputs to the coarse spatial size so concatenation works
+        h, w = coarse.shape[2:]
+        p1_up = F.interpolate(p1, size=(h, w), mode='nearest')
+        p2_up = F.interpolate(p2, size=(h, w), mode='nearest')
+        p3_up = F.interpolate(p3, size=(h, w), mode='nearest')
+        prior = torch.cat([p1_up, p2_up, p3_up], dim=1)
+        prior = self.out_conv(prior)
+
+        return prior  # (B, prior_channels, H, W)
 
 if __name__ == "__main__":
-    swa = SelectiveWeightedAttention(in_channels1=64, in_channels2=128)
+    wap = SPGWithFPN(in_channels1=64, in_channels2=256)
     F1 = torch.randn(1, 64, 112, 112)
-    F2 = torch.randn(1, 128, 56, 56)
+    F2 = torch.randn(1, 256, 28, 28)
     
-    out = swa(F1, F2)
-    print(out.shape) 
+    out = wap(F1, F2)
+    print(out.shape) # the output is torch.Size([1, 256, 112, 112])

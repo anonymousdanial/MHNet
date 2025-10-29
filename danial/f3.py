@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 class F3Conv(nn.Module):
-    def __init__(self, in_channels=64, out_channels=128):
+    def __init__(self, in_channels=256, out_channels=128):
         super().__init__()
         # 3x3 convolution, stride 1, padding 1 to preserve spatial size
         # You can change stride if you want downsampling
@@ -20,7 +20,7 @@ class F3Conv(nn.Module):
 
 # ----- Quick test -----
 if __name__ == "__main__":
-    F3 = torch.randn(1, 64, 28, 28)  # example backbone feature map
-    model = F3Conv(in_channels=64, out_channels=128)
+    F3 = torch.randn(1, 256, 28, 28)  # example backbone feature map
+    model = F3Conv(in_channels=256, out_channels=128)
     out = model(F3)
     print("F3 conv output shape:", out.shape)
