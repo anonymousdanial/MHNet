@@ -21,7 +21,7 @@ class Model(nn.Module):
         self.backbone = vgg.backbone()
         
         # SPG (Selective Weighted Attention)
-        self.spg = spg.SelectiveWeightedAttention(in_channels1=64, in_channels2=128)
+        self.spg = spg.SPGWithFPN(in_channels1=64, in_channels2=256)
         
         # F3 Convolution
         self.conv_f3 = conv_f3.F3Conv(in_channels=256, out_channels=128)
@@ -43,7 +43,7 @@ class Model(nn.Module):
         f3 = features['block3']
         
         # SPG processing
-        spg_out = self.spg(f1, f2)
+        spg_out = self.spg(f1, f3)
         
         # F3 processing
         f3_conv = self.conv_f3(f3)
@@ -63,11 +63,11 @@ class Model(nn.Module):
     def summary(self):
         print("Model Components:")
         print("- VGG Backbone")
-        print("- Selective Weighted Attention (SPG)")
+        print("- Subject Percetion Gathering (SPG)")
         print("- F3 Convolution")
-        print("- PRM (Perception Refinement Module)")
+        print("- Per-Object Relationships mining (PRM)")
         print("- PreFCS")
-        print("- CRFCS (Conditional Random Field based Camouflage Segmentation)")
+        print("- Concept recovery/Feature Clue Supplement (CRFCS)")
 
 
 if __name__ == "__main__":
