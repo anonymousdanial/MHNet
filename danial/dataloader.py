@@ -11,7 +11,7 @@ class ImageDataLoader(Dataset):
     in VGG-compatible format.
     """
     
-    def __init__(self, image_dir, target_size=(224, 224), normalize_imagenet=True,
+    def __init__(self, image_dir, target_size=(512, 512), normalize_imagenet=True,
                  extensions=('.jpg', '.jpeg', '.png', '.bmp', '.tiff')):
         """
         Args:
@@ -86,7 +86,7 @@ class ImageDataLoader(Dataset):
         )
 
 
-def load_image(image_path, target_size=(224, 224), normalize_imagenet=True):
+def load_image(image_path, target_size=(512, 512), normalize_imagenet=True):
     """
     Load a single image and convert it to VGG-compatible format.
     
