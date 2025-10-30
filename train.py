@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from danial import model, dataloader, loss
+from danial import model, dataloader, loss_d
 
 def main():
 	parser = argparse.ArgumentParser(description='Train MHNet')
@@ -36,7 +36,7 @@ def main():
 		num_workers=4
 	)
 
-	criterion = loss.SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
+	criterion = loss_d.SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
 	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-5)
 
 	# Lightweight segmentation head that maps the fused feature map to a 1-channel
