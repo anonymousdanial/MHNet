@@ -4,9 +4,9 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from danial import model
-from danial import dataloader
 import matplotlib.pyplot as plt
+
+from danial import model, dataloader, loss
 
 def main():
 	parser = argparse.ArgumentParser(description='Train MHNet')
@@ -36,8 +36,8 @@ def main():
 		num_workers=4
 	)
 
-	criterion = nn.BCEWithLogitsLoss()  # Binary classification for segmentation
-	optimizer = optim.Adam(net.parameters(), lr=args.lr)
+	criterion = loss.SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
+	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-5)
 
 	# Lightweight segmentation head that maps the fused feature map to a 1-channel
 	# spatial prediction and upsamples to the input image size. This is a stop-gap
