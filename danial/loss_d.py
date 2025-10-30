@@ -19,10 +19,11 @@ class SegmentationLoss(nn.Module):
         self.dice_weight = dice_weight
         self.smooth = smooth
         
+        # Store pos_weight as a parameter or buffer so it moves with the model
         if pos_weight is not None:
-            self.bce = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+            self.register_buffer('pos_weight', torch.tensor([pos_weight]))
         else:
-            self.bce = nn.BCEWithLogitsLoss()
+            self.pos_weight = None
     
     def dice_loss(self, pred, target):
         """
@@ -46,13 +47,17 @@ class SegmentationLoss(nn.Module):
         pred: model output (logits) - shape: (B, C, H, W) or (B, H, W)
         target: ground truth mask - shape: (B, C, H, W) or (B, H, W), values in [0, 1]
         """
-        bce_loss = self.bce(pred, target)
+        if self.pos_weight is not None:
+            bce_loss = F.binary_cross_entropy_with_logits(pred, target, pos_weight=self.pos_weight)
+        else:
+            bce_loss = F.binary_cross_entropy_with_logits(pred, target)
+            
         dice_loss = self.dice_loss(pred, target)
         
         total_loss = self.bce_weight * bce_loss + self.dice_weight * dice_loss
         
         return total_loss
-
+    
 
 # Usage examples:
 if __name__ == "__main__":
