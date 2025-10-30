@@ -113,14 +113,6 @@ def load_image(image_path, target_size=(512, 512), normalize_imagenet=True):
     
     return img_tensor
 
-
-# Example usage
-if __name__ == "__main__":
-    # Load single image
-    img = load_image('/Users/dania/code/fyp/MHNet/assets/RR.png')
-    print(f"Single image shape: {img}")  # (1, 3, 224, 224)
-
-
 class SegmentationDataset(Dataset):
     """
     Dataset that returns (image_tensor, mask_tensor) pairs for segmentation.
@@ -199,3 +191,16 @@ class SegmentationDataset(Dataset):
 
     def get_dataloader(self, batch_size=32, shuffle=False, num_workers=0):
         return DataLoader(self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    
+
+# Example usage
+if __name__ == "__main__":
+    image_dir = "/Users/dania/code/fyp/MHNet/test-images/images"
+    mask_dir = "/Users/dania/code/fyp/MHNet/test-images/masks"
+    mod = SegmentationDataset(image_dir, mask_dir)
+    
+    sample = mod[0]
+    print("Image shape:", sample[0].shape)
+    print("Mask shape:", sample[1].shape)
+
+

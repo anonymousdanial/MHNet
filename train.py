@@ -14,7 +14,6 @@ def main():
 	parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
 	parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
 	parser.add_argument('--device', type=str, default='cuda', help='Device: cuda or cpu')
-	parser.add_argument('--smoke', action='store_true', help='Run one-batch smoke test and exit')
 	parser.add_argument('--save-name', type=str, default='first', help='Subdirectory under models to save checkpoints (e.g. first, second)')
 	args = parser.parse_args()
 
@@ -66,22 +65,6 @@ def main():
 			optimizer.zero_grad()
 			binary_pred, boundary_pred, fused_feat = net(inputs)
 			
-			# If running a smoke test just print shapes and exit (model here returns
-			# classification/regression heads plus recovered features, not spatial masks)
-			if args.smoke:
-				print('binary_pred shape:', getattr(binary_pred, 'shape', None))
-				print('boundary_pred shape:', getattr(boundary_pred, 'shape', None))
-				print('fused_feat shape:', getattr(fused_feat, 'shape', None))
-				# Compute seg prediction and loss for the smoke test
-				seg_pred = seg_head(fused_feat)
-				print('seg_pred shape:', seg_pred.shape)
-				try:
-					seg_loss = criterion(seg_pred, targets.to(device))
-				except Exception as e:
-					seg_loss = e
-				print('seg_loss:', seg_loss)
-				return
-			
 			# Compute a segmentation prediction from the recovered fused feature map
 			# fused_feat shape is typically [B, 64, 7, 7]; map -> [B,1,224,224]
 			seg_pred = seg_head(fused_feat)
@@ -95,10 +78,6 @@ def main():
 			running_loss += loss.item()
 			if (i+1) % 10 == 0:
 				print(f'Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
-			# If smoke test requested, run only one batch and exit
-			if args.smoke:
-				print('Smoke test: processed one batch, exiting')
-				return
 		avg_loss = running_loss / len(train_loader)
 		print(f'Epoch [{epoch+1}/{args.epochs}] finished. Avg Loss: {avg_loss:.4f}')
 

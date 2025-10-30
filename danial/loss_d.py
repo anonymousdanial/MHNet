@@ -62,16 +62,25 @@ class SegmentationLoss(nn.Module):
 # Usage examples:
 if __name__ == "__main__":
     # 1. Basic usage (balanced classes)
-    criterion = SegmentationLoss()
+    # criterion = SegmentationLoss()
 
-    # 2. With class imbalance (e.g., 10x more negative samples)
-    criterion = SegmentationLoss(pos_weight=10.0)
+    # # 2. With class imbalance (e.g., 10x more negative samples)
+    # criterion = SegmentationLoss(pos_weight=10.0)
 
-    # 3. More weight on Dice for better boundaries
-    criterion = SegmentationLoss(bce_weight=0.3, dice_weight=0.7)
+    # # 3. More weight on Dice for better boundaries
+    # criterion = SegmentationLoss(bce_weight=0.3, dice_weight=0.7)
 
-    # 4. Pure BCE (like your current setup)
-    criterion = SegmentationLoss(bce_weight=1.0, dice_weight=0.0)
+    # # 4. Pure BCE (like your current setup)
+    # criterion = SegmentationLoss(bce_weight=1.0, dice_weight=0.0)
 
-    # 5. Pure Dice
-    criterion = SegmentationLoss(bce_weight=0.0, dice_weight=1.0)
+    # # 5. Pure Dice
+    # criterion = SegmentationLoss(bce_weight=0.0, dice_weight=1.0)
+    
+    seg_head = nn.Sequential(
+		nn.Conv2d(64, 1, kernel_size=1),
+		nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
+	    ).to(torch.device('cpu'))
+    
+    criterion = SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
+    seg_pred = seg_head(fused_feat)
+    seg_loss = criterion(seg_pred, targets)

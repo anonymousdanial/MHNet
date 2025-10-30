@@ -28,6 +28,8 @@ class PreFCS(nn.Module):
         super().__init__()
         # Convolution to map feature3 channels to match PRM output channels (64)
         self.feature3_conv = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        # PRM conv will be created on-demand in forward if PRM channels != feature channels
+        self.prm_conv = None
         
         # Reverse attention module
         self.attention = ReverseAttention(64)
@@ -51,10 +53,33 @@ class PreFCS(nn.Module):
         f3_up = F.interpolate(f3, size=prm_out.shape[-2:], mode='bilinear', align_corners=False)
         
         # 2. Reduce PRM from 5D to 4D if needed
-        if prm_out.dim() == 5:  # [B, 1, C, H, W]
-            prm_out_4d = prm_out.squeeze(1)  # [B, C, H, W]
+        # Accept either [B, 1, C, H, W] or [B, S, C, H, W].
+        # If S==1 we squeeze that dim; if S>1 we merge S and C into channels (S*C).
+        if prm_out.dim() == 5:
+            B, S, C, H, W = prm_out.shape
+            if S == 1:
+                prm_out_4d = prm_out.squeeze(1)  # [B, C, H, W]
+            else:
+                # merge S and C into channel dimension -> [B, S*C, H, W]
+                prm_out_4d = prm_out.reshape(B, S * C, H, W)
         else:
             prm_out_4d = prm_out
+        # If PRM channels don't match feature channels, map PRM -> feature channels with 1x1 conv
+        prm_ch = prm_out_4d.shape[1]
+        target_ch = f3_up.shape[1]
+        if prm_ch != target_ch:
+            # Create or recreate conv if input channels changed
+            if (self.prm_conv is None) or (hasattr(self.prm_conv, 'in_channels') and self.prm_conv.in_channels != prm_ch):
+                # create and register conv layer
+                conv = nn.Conv2d(prm_ch, target_ch, kernel_size=1)
+                # assign to module so parameters are registered
+                self.prm_conv = conv
+                # try to move to same device as prm_out_4d
+                try:
+                    self.prm_conv.to(prm_out_4d.device)
+                except Exception:
+                    pass
+            prm_out_4d = self.prm_conv(prm_out_4d)
         
         # 3. Element-wise addition
         fused = f3_up + prm_out_4d
@@ -75,8 +100,9 @@ class PreFCS(nn.Module):
 
 
 if __name__ == "__main__":
-    feature3 = torch.randn(1, 128, 28, 28)
-    prm_out  = torch.randn(1, 1, 64, 56, 56)
+    batch = 8
+    feature3 = torch.randn(batch, 128, 28, 28)
+    prm_out  = torch.randn(batch, 8, 8, 56, 56)
 
     pre_fcs = PreFCS()
     roi_features = pre_fcs(feature3, prm_out)

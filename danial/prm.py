@@ -60,13 +60,16 @@ class DeconvCaps(nn.Module):
         super().__init__()
         self.deconv = nn.ConvTranspose2d(in_caps * in_dim, out_caps * out_dim,
                                          kernel_size=kernel_size, stride=stride, padding=padding)
+        self.out_caps = out_caps
+        self.out_dim = out_dim
 
     def forward(self, x):
         B, in_caps, in_dim, H, W = x.size()
         x = x.view(B, in_caps * in_dim, H, W)
         out = self.deconv(x)
         B, C, H, W = out.size()
-        out = out.view(B, -1, C // (B * 1), H, W)
+        out = out.view(B, self.out_caps, self.out_dim, H, W)
+
         return out
 
 
@@ -102,8 +105,9 @@ class PRM(nn.Module):
 
 # ----- Quick test -----
 if __name__ == "__main__":
-    F3_conv = torch.randn(1, 128, 28, 28)  # F3 already convoluted
-    F25 = torch.randn(1, 256, 112, 112)     # SPG output
+    batch_size = 1
+    F3_conv = torch.randn(batch_size, 128, 28, 28)  # F3 already convoluted
+    F25 = torch.randn(batch_size, 256, 112, 112)     # SPG output
     model = PRM(f3_channels=128, spg_channels=256, fused_channels=128)
     out = model(F3_conv, F25)
     print("PRM output shape:", out.shape)
