@@ -35,7 +35,13 @@ def main():
 		num_workers=4
 	)
 
-	criterion = loss_d.SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
+	criterion = loss_fn = loss_d.FeatureMapLoss(
+        mse_weight=1.0,
+        cosine_weight=0.5,
+        pearson_weight=0.3,
+        gram_weight=0.1,
+        reduction="mean",
+    ).to(device)
 	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-5)
 
 	# Lightweight segmentation head that maps the fused feature map to a 1-channel

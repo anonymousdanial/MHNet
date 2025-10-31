@@ -2,98 +2,136 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SegmentationLoss(nn.Module):
+
+class FeatureMapLoss(nn.Module):
     """
-    Combined loss for segmentation tasks.
-    Combines BCE with Logits and Dice Loss for robust training.
-    
-    Args:
-        bce_weight: Weight for BCE loss component (default: 0.5)
-        dice_weight: Weight for Dice loss component (default: 0.5)
-        pos_weight: Positive class weight for handling imbalance (default: None)
-        smooth: Smoothing factor for Dice loss to avoid division by zero (default: 1e-6)
+    Robust composite loss for feature-map comparison [B, C, H, W].
     """
-    def __init__(self, bce_weight=0.5, dice_weight=0.5, pos_weight=None, smooth=1e-6):
+
+    def __init__(
+        self,
+        mse_weight: float = 1.0,
+        l1_weight: float = 0.0,
+        cosine_weight: float = 0.0,
+        pearson_weight: float = 0.0,
+        gram_weight: float = 0.0,
+        reduction: str = "mean",
+    ):
         super().__init__()
-        self.bce_weight = bce_weight
-        self.dice_weight = dice_weight
-        self.smooth = smooth
-        
-        # Store pos_weight as a parameter or buffer so it moves with the model
-        if pos_weight is not None:
-            self.register_buffer('pos_weight', torch.tensor([pos_weight]))
-        else:
-            self.pos_weight = None
-    
-    def dice_loss(self, pred, target):
-        """
-        Compute Dice loss.
-        pred: logits (before sigmoid)
-        target: ground truth mask [0, 1]
-        """
-        pred = torch.sigmoid(pred)
-        
-        # Flatten tensors
-        pred = pred.view(-1)
-        target = target.view(-1)
-        
-        intersection = (pred * target).sum()
-        dice_score = (2. * intersection + self.smooth) / (pred.sum() + target.sum() + self.smooth)
-        
-        return 1 - dice_score
-    
-    def forward(self, pred, target):
-        """
-        pred: model output (logits) - shape: (B, C, H, W) or (B, H, W)
-        target: ground truth mask - shape: (B, C, H, W) or (B, H, W), values in [0, 1]
-        """
-        if self.pos_weight is not None:
-            bce_loss = F.binary_cross_entropy_with_logits(pred, target, pos_weight=self.pos_weight)
-        else:
-            bce_loss = F.binary_cross_entropy_with_logits(pred, target)
-            
-        dice_loss = self.dice_loss(pred, target)
-        
-        total_loss = self.bce_weight * bce_loss + self.dice_weight * dice_loss
-        
-        return total_loss
-    
+        self.weights = {
+            "mse": mse_weight,
+            "l1": l1_weight,
+            "cosine": cosine_weight,
+            "pearson": pearson_weight,
+            "gram": gram_weight,
+        }
+        if reduction not in {"mean", "sum"}:
+            raise ValueError("reduction must be 'mean' or 'sum'")
+        self.reduction = reduction
+        self.active = {k for k, w in self.weights.items() if w > 0.0}
 
-# Usage examples:
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _gram_matrix(feat: torch.Tensor) -> torch.Tensor:
+        B, C, H, W = feat.shape
+        f = feat.view(B, C, H * W)
+        g = torch.bmm(f, f.transpose(1, 2))
+        return g.div_(C * H * W)
+
+    @staticmethod
+    def _pearson_corr(f1: torch.Tensor, f2: torch.Tensor) -> torch.Tensor:
+        """
+        Channel-wise Pearson correlation -> [B, C]
+        """
+        f1 = f1.view(f1.size(0), f1.size(1), -1)   # [B, C, N]
+        f2 = f2.view(f2.size(0), f2.size(1), -1)
+
+        mean1 = f1.mean(dim=2, keepdim=True)
+        mean2 = f2.mean(dim=2, keepdim=True)
+
+        std1 = f1.std(dim=2, keepdim=True) + 1e-8
+        std2 = f2.std(dim=2, keepdim=True) + 1e-8
+
+        cov = ((f1 - mean1) * (f2 - mean2)).mean(dim=2)           # [B, C]
+
+        # <<< FIX: squeeze the singleton dim before division >>>
+        return cov / (std1.squeeze(2) * std2.squeeze(2))          # [B, C]
+
+    # ------------------------------------------------------------------ #
+    def forward(self, feat1: torch.Tensor, feat2: torch.Tensor) -> torch.Tensor:
+        if feat1.shape != feat2.shape:
+            raise ValueError(f"Shape mismatch: {feat1.shape} vs {feat2.shape}")
+
+        total = 0.0
+        terms = {}
+
+        # ------------------- MSE -------------------
+        if "mse" in self.active:
+            mse = F.mse_loss(feat1, feat2, reduction="none").mean(dim=[1, 2, 3])  # [B]
+            terms["mse"] = mse
+            total = total + self.weights["mse"] * mse
+
+        # ------------------- L1 --------------------
+        if "l1" in self.active:
+            l1 = F.l1_loss(feat1, feat2, reduction="none").mean(dim=[1, 2, 3])   # [B]
+            terms["l1"] = l1
+            total = total + self.weights["l1"] * l1
+
+        # ------------------- Cosine ----------------
+        if "cosine" in self.active:
+            f1 = feat1.view(feat1.size(0), feat1.size(1), -1)
+            f2 = feat2.view(feat2.size(0), feat2.size(1), -1)
+            cos = F.cosine_similarity(f1, f2, dim=2)          # [B, C]
+            cos_loss = (1.0 - cos).mean(dim=1)                # [B]
+            terms["cosine"] = cos_loss
+            total = total + self.weights["cosine"] * cos_loss
+
+        # ------------------- Pearson ---------------
+        if "pearson" in self.active:
+            corr = self._pearson_corr(feat1, feat2)           # [B, C]
+            pearson_loss = (1.0 - corr).mean(dim=1)           # [B]
+            terms["pearson"] = pearson_loss
+            total = total + self.weights["pearson"] * pearson_loss
+
+        # ------------------- Gram -------------------
+        if "gram" in self.active:
+            g1 = self._gram_matrix(feat1)
+            g2 = self._gram_matrix(feat2)
+            gram_loss = F.mse_loss(g1, g2, reduction="none").mean(dim=[1, 2])  # [B]
+            terms["gram"] = gram_loss
+            total = total + self.weights["gram"] * gram_loss
+
+        # ------------------- Final reduction ----------
+        if self.reduction == "mean":
+            total = total.mean()
+        # else: sum over batch
+
+        # Attach per-term scalars for logging
+        for name, t in terms.items():
+            setattr(total, f"{name}_loss", t.mean().item())
+
+        return total
+
+
+# ----------------------------------------------------------------------
+# Demo (replace the whole file with this)
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    # 1. Basic usage (balanced classes)
-    # criterion = SegmentationLoss()
+    B, C, H, W = 16, 64, 224, 224
+    a = torch.randn(B, C, H, W)
+    b = a.clone() + torch.randn_like(a) * 0.5
 
-    # # 2. With class imbalance (e.g., 10x more negative samples)
-    # criterion = SegmentationLoss(pos_weight=10.0)
+    loss_fn = FeatureMapLoss(
+        mse_weight=1.0,
+        cosine_weight=0.5,
+        pearson_weight=0.3,
+        gram_weight=0.1,
+        reduction="mean",
+    )
 
-    # # 3. More weight on Dice for better boundaries
-    # criterion = SegmentationLoss(bce_weight=0.3, dice_weight=0.7)
-
-    # # 4. Pure BCE (like your current setup)
-    # criterion = SegmentationLoss(bce_weight=1.0, dice_weight=0.0)
-
-    # # 5. Pure Dice
-    # criterion = SegmentationLoss(bce_weight=0.0, dice_weight=1.0)
-    batch_size = 8
-    x1 = torch.randn(batch_size, 64, 7, 7)  # Example feature map from encoder
-    scale_factor = 32       # how much to upscale
-    delta = 0.1            # the "difference" to add
-
-    # 1. Upscale the tensor
-    x_up = F.interpolate(x1, scale_factor=scale_factor, mode='bilinear', align_corners=False)
-
-    # 2. Add small difference (changeable)
-    x_up_perturbed = x_up + delta * torch.randn_like(x_up)
-    x2 = torch.randn(batch_size, 64, 224, 224)
-    
-    seg_head = nn.Sequential(
-		nn.Conv2d(64, 64, kernel_size=1),
-		nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
-	    ).to(torch.device('cpu'))
-    
-    criterion = SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
-    seg_pred = seg_head(x1)
-    seg_loss = criterion(seg_pred, x_up_perturbed)
-
-    print(seg_loss.item())
+    loss = loss_fn(a, b)
+    print(f"Total loss: {loss.item():.6f}")
+    print(f"MSE:      {loss.mse_loss:.6f}")
+    print(f"Cosine:   {loss.cosine_loss:.6f}")
+    print(f"Pearson:  {loss.pearson_loss:.6f}")
+    print(f"Gram:     {loss.gram_loss:.6f}")
