@@ -5,8 +5,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
+import shutil
 
-from danial import model, dataloader, loss_d
+from danial import model, dataloader, loss_d, cod10k
+
+
+
 
 def main():
 	parser = argparse.ArgumentParser(description='Train MHNet')
@@ -21,7 +25,8 @@ def main():
 	net = model.Model().to(device)
 
 	# Create data loader for training data (COD10K-v2)
-	train_image_dir = 'dasatet/COD10k-v2/Train/Images/Image'
+	print(cod10k.fuyo())
+	train_image_dir = 'dasatet/COD10k-v2/Train/Images/camo_images'
 	train_mask_dir = 'dasatet/COD10k-v2/Train/GT_Objects/GT_Object'
 	train_dataset = dataloader.SegmentationDataset(
 		image_dir=train_image_dir,
@@ -78,7 +83,9 @@ def main():
 		log_path = os.path.join(model_dir, 'log.txt')
 		try:
 			with open(log_path, 'a') as lf:
-				lf.write(f"{epoch+1},{avg_loss}\n")
+				lf.write(f"""
+			{epoch+1},{avg_loss}
+			 """)
 		except Exception as e:
 			print('Warning: failed to write log:', e)
 
@@ -86,7 +93,6 @@ def main():
 		ckpt = {
 			'epoch': epoch + 1,
 			'model_state_dict': net.state_dict(),
-			'seg_head_state_dict': seg_head.state_dict(),
 			'optimizer_state_dict': optimizer.state_dict(),
 			'loss': avg_loss,
 		}
