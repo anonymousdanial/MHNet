@@ -12,7 +12,7 @@ def main():
 	parser = argparse.ArgumentParser(description='Train MHNet')
 	parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 	parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
-	parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
+	parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
 	parser.add_argument('--device', type=str, default='cuda', help='Device: cuda or cpu')
 	parser.add_argument('--save-name', type=str, default='first', help='Subdirectory under models to save checkpoints (e.g. first, second)')
 	args = parser.parse_args()
@@ -22,7 +22,7 @@ def main():
 
 	# Create data loader for training data (COD10K-v2)
 	train_image_dir = 'dasatet/COD10k-v2/Train/Images/Image'
-	train_mask_dir = 'dasatet/COD10k-v2/Train/GT_Objects/GT_Object'
+	train_mask_dir = 'dupdated asatet/COD10k-v2/Train/GT_Objects/GT_Object'
 	train_dataset = dataloader.SegmentationDataset(
 		image_dir=train_image_dir,
 		mask_dir=train_mask_dir,
@@ -42,7 +42,7 @@ def main():
         gram_weight=0.1,
         reduction="mean",
     ).to(device)
-	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-5)
+	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
 
 	# Lightweight segmentation head that maps the fused feature map to a 1-channel
 	# spatial prediction and upsamples to the input image size. This is a stop-gap
