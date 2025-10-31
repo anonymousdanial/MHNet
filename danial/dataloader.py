@@ -197,10 +197,14 @@ class SegmentationDataset(Dataset):
 if __name__ == "__main__":
     image_dir = "/Users/dania/code/fyp/MHNet/test-images/images"
     mask_dir = "/Users/dania/code/fyp/MHNet/test-images/masks"
-    mod = SegmentationDataset(image_dir, mask_dir)
-    
-    sample = mod[0]
-    print("Image shape:", sample[0].shape)
-    print("Mask shape:", sample[1].shape)
+    dataset = SegmentationDataset(image_dir, mask_dir)
+    loader = dataset.get_dataloader(batch_size=1, shuffle=True)
+
+    img, mask = next(iter(loader))
+
+    print("Image shape:", img.shape)       # Expect (1, 3, 224, 224)
+    print("Mask shape:", mask.shape)       # Expect (1, 1, 224, 224)
+    print("Mask unique values:", torch.unique(mask))
+    print("Mask min:", mask.min().item(), "Mask max:", mask.max().item())
 
 
