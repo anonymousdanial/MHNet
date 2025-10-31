@@ -2,13 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import torch
-import torch.nn as nn
-
 class SingleMaskLoss(nn.Module):
     """
     For models that output [B, 64, H, W] but predict ONE binary mask.
-    Averages the 64 channels → then applies BCE + Dice.
+    Uses a learnable 1x1 conv to combine 64 channels → then applies BCE + Dice.
     """
     def __init__(self, bce_weight=1.0, dice_weight=1.0, smooth=1e-6):
         super().__init__()
@@ -16,6 +13,9 @@ class SingleMaskLoss(nn.Module):
         self.dice_weight = dice_weight
         self.smooth = smooth
         self.bce = nn.BCEWithLogitsLoss()
+
+        # Learnable 1x1 convolution to reduce 64 channels to 1
+        self.reduce = nn.Conv2d(64, 1, kernel_size=1)
 
     def forward(self, logits_64, target):
         """
@@ -26,8 +26,8 @@ class SingleMaskLoss(nn.Module):
         if target.dim() == 3:
             target = target.unsqueeze(1).float()
 
-        # Average over 64 channels
-        logits = logits_64.mean(dim=1, keepdim=True)  # [B, 1, H, W]
+        # Use learnable conv instead of averaging
+        logits = self.reduce(logits_64)  # [B, 1, H, W]
 
         total = 0.0
 
@@ -45,10 +45,14 @@ class SingleMaskLoss(nn.Module):
 
         return total
 
-
+# Example usage:
 if __name__ == "__main__":
-    mod_out = torch.randn(16, 64, 224, 224)
-    GT  = torch.randn(16, 1, 224, 224)
+    mod_out = torch.randn(16, 64, 224, 224, requires_grad=True)
+    GT = torch.randn(16, 1, 224, 224)
     criterion = SingleMaskLoss()
     loss = criterion(mod_out, GT)
-    print(loss)
+    loss.backward()
+
+    print("Loss:", loss.item())
+    print("Gradient magnitude on output:", mod_out.grad.abs().mean().item())
+    print("Gradient magnitude on reduce weights:", criterion.reduce.weight.grad.abs().mean().item())
