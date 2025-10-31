@@ -22,7 +22,7 @@ def main():
 
 	# Create data loader for training data (COD10K-v2)
 	train_image_dir = 'dasatet/COD10k-v2/Train/Images/Image'
-	train_mask_dir = 'dupdated asatet/COD10k-v2/Train/GT_Objects/GT_Object'
+	train_mask_dir = 'dasatet/COD10k-v2/Train/GT_Objects/GT_Object'
 	train_dataset = dataloader.SegmentationDataset(
 		image_dir=train_image_dir,
 		mask_dir=train_mask_dir,
@@ -44,16 +44,6 @@ def main():
     ).to(device)
 	optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
 
-	# Lightweight segmentation head that maps the fused feature map to a 1-channel
-	# spatial prediction and upsamples to the input image size. This is a stop-gap
-	# so the training script can compute a segmentation loss against available masks.
-	seg_head = nn.Sequential(
-		nn.Conv2d(64, 1, kernel_size=1),
-		nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
-	).to(device)
-
-	# Add seg_head params to optimizer so it's trained together with the model
-	optimizer.add_param_group({'params': seg_head.parameters()})
 
 	# Prepare models directory (use save-name arg so user can choose first/second/etc.)
 	model_dir = os.path.join('models', args.save_name)
@@ -71,14 +61,11 @@ def main():
 			optimizer.zero_grad()
 			binary_pred, boundary_pred, fused_feat = net(inputs)
 			
-			# Compute a segmentation prediction from the recovered fused feature map
-			# fused_feat shape is typically [B, 64, 7, 7]; map -> [B,1,224,224]
-			seg_pred = seg_head(fused_feat)
 			# targets: [B,1,224,224]
-			seg_loss = criterion(seg_pred, targets)
+
+			# loss for map only
+			loss = criterion(fused_feat, targets)
 			
-			# For now the training loss will be the segmentation loss
-			loss = seg_loss
 			loss.backward()
 			optimizer.step()
 			running_loss += loss.item()
