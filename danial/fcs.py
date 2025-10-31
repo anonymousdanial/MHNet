@@ -14,20 +14,21 @@ class CRFCS(nn.Module):
     Args:
         roi_channels (int): Number of channels in the ROI feature map (default: 512)
         boundary_channels (int): Number of channels in the boundary feature map (default: 512)
+        output_size (int): Size of the output feature map (default: 224)
     """
     
-    def __init__(self, roi_channels=64, boundary_channels=512):
+    def __init__(self, roi_channels=64, boundary_channels=512, output_size=224):
         super(CRFCS, self).__init__()
         
+        self.output_size = output_size
+        
         # 1x1 convolution to generate masked feature map
-        # self.mask_conv = nn.Conv2d(roi_channels, 1, kernel_size=1, bias=True)
         # Use a slightly deeper conv to get more spatial variation
         self.mask_conv = nn.Sequential(
             nn.Conv2d(roi_channels, roi_channels // 2, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(roi_channels // 2, 1, kernel_size=1),
-)
-
+        )
         
         # 1x1 convolution for boundary feature constraint
         self.boundary_conv = nn.Conv2d(boundary_channels, 1, kernel_size=1, bias=True)
@@ -42,10 +43,11 @@ class CRFCS(nn.Module):
         
         self.sigmoid = nn.Sigmoid()
         self.relu = nn.ReLU(inplace=True)
-        # CI head (classification)
+        
+        # CI head (classification) - now uses pooled features
         self.cls_head = nn.Linear(roi_channels * 7 * 7, 5) # 5 refers to number of classes
 
-        # Reg head (bounding box)
+        # Reg head (bounding box) - now uses pooled features
         self.reg_head = nn.Linear(roi_channels * 7 * 7, 4)
 
         
@@ -60,7 +62,9 @@ class CRFCS(nn.Module):
                               e.g., [1, 64, 56, 56]
             
         Returns:
-            recovered_features: Feature map with recovered missing cues [B, C, H_roi, W_roi]
+            cls_out: Classification predictions [B, num_classes]
+            reg_out: Bounding box regression [B, 4]
+            recovered_features: Feature map with recovered missing cues [B, C, 224, 224]
         """
         B, C, H_roi, W_roi = roi_features.shape
         _, _, H_bound, W_bound = boundary_features.shape
@@ -105,12 +109,22 @@ class CRFCS(nn.Module):
         attention_weights = self.attention_conv(combined)
         attention_weights = self.sigmoid(attention_weights)
         
+        # Apply weighted combination (still at 7x7)
+        recovered_features_7x7 = attention_weights * x_t + (1 - attention_weights) * roi_features
         
-        # Apply weighted combination
-        recovered_features = attention_weights * x_t + (1 - attention_weights) * roi_features
-        x_flat = recovered_features.view(B, -1)
+        # For classification and regression heads, use the 7x7 features
+        x_flat = recovered_features_7x7.view(B, -1)
         cls_out = self.cls_head(x_flat)
         reg_out = self.reg_head(x_flat)
+        
+        # Upsample recovered features to 224x224
+        recovered_features = F.interpolate(
+            recovered_features_7x7,
+            size=(self.output_size, self.output_size),
+            mode='bilinear',
+            align_corners=False
+        )  # [B, C, 224, 224]
+        
         return cls_out, reg_out, recovered_features
     
     def get_reverse_attention_map(self, roi_features):
@@ -131,7 +145,7 @@ class CRFCS(nn.Module):
 # Example usage
 if __name__ == "__main__":
     # Create module
-    crfcs = CRFCS(roi_channels=64, boundary_channels=64)
+    crfcs = CRFCS(roi_channels=64, boundary_channels=64, output_size=224)
     
     # Example inputs
     batch_size = 1

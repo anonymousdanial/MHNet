@@ -75,12 +75,25 @@ if __name__ == "__main__":
 
     # # 5. Pure Dice
     # criterion = SegmentationLoss(bce_weight=0.0, dice_weight=1.0)
+    batch_size = 8
+    x1 = torch.randn(batch_size, 64, 7, 7)  # Example feature map from encoder
+    scale_factor = 32       # how much to upscale
+    delta = 0.1            # the "difference" to add
+
+    # 1. Upscale the tensor
+    x_up = F.interpolate(x1, scale_factor=scale_factor, mode='bilinear', align_corners=False)
+
+    # 2. Add small difference (changeable)
+    x_up_perturbed = x_up + delta * torch.randn_like(x_up)
+    x2 = torch.randn(batch_size, 64, 224, 224)
     
     seg_head = nn.Sequential(
-		nn.Conv2d(64, 1, kernel_size=1),
+		nn.Conv2d(64, 64, kernel_size=1),
 		nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
 	    ).to(torch.device('cpu'))
     
     criterion = SegmentationLoss(bce_weight=0.5, dice_weight=0.5, pos_weight=2.0)
-    seg_pred = seg_head(fused_feat)
-    seg_loss = criterion(seg_pred, targets)
+    seg_pred = seg_head(x1)
+    seg_loss = criterion(seg_pred, x_up_perturbed)
+
+    print(seg_loss.item())
