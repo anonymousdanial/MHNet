@@ -49,6 +49,9 @@ class CRFCS(nn.Module):
 
         # Reg head (bounding box) - now uses pooled features
         self.reg_head = nn.Linear(roi_channels * 7 * 7, 4)
+        
+        # Single mask reduction (moved from loss)
+        self.mask_reduce = nn.Conv2d(roi_channels, 1, kernel_size=1)
 
         
     def forward(self, roi_features, boundary_features):
@@ -125,7 +128,10 @@ class CRFCS(nn.Module):
             align_corners=False
         )  # [B, C, 224, 224]
         
-        return cls_out, reg_out, recovered_features
+        # Get reduced mask output (parallel to other outputs)
+        mask_output = self.mask_reduce(recovered_features)
+        
+        return cls_out, reg_out, recovered_features, mask_output
     
     def get_reverse_attention_map(self, roi_features):
         """

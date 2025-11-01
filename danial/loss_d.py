@@ -14,10 +14,7 @@ class SingleMaskLoss(nn.Module):
         self.smooth = smooth
         self.bce = nn.BCEWithLogitsLoss()
 
-        # Learnable 1x1 convolution to reduce 64 channels to 1
-        self.reduce = nn.Conv2d(64, 1, kernel_size=1)
-
-    def forward(self, logits_64, target):
+    def forward(self, logits, target):
         """
         logits_64: [B, 64, H, W] – raw model output
         target:    [B, H, W] or [B, 1, H, W] – binary ground truth
@@ -25,9 +22,6 @@ class SingleMaskLoss(nn.Module):
         # Ensure target is [B, 1, H, W]
         if target.dim() == 3:
             target = target.unsqueeze(1).float()
-
-        # Use learnable conv instead of averaging
-        logits = self.reduce(logits_64)  # [B, 1, H, W]
 
         total = 0.0
 
