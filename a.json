@@ -1,0 +1,44 @@
+{
+    "images": [
+        {
+            "id": 1,
+            "width": 640,
+            "height": 480,
+            "file_name": "image1.jpg"
+        }
+    ],
+    "annotations": [
+        {
+            "id": 1,
+            "image_id": 1,
+            "category_id": 1,
+            "bbox": [
+                100,
+                150,
+                200,
+                100
+            ],
+            "area": 20000,
+            "segmentation": [
+                [
+                    100,
+                    150,
+                    300,
+                    150,
+                    300,
+                    250,
+                    100,
+                    250
+                ]
+            ],
+            "iscrowd": 0
+        }
+    ],
+    "categories": [
+        {
+            "id": 1,
+            "name": "car",
+            "supercategory": "car"
+        }
+    ]
+}

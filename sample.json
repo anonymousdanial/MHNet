@@ -1,0 +1,44 @@
+{
+    "images": [
+        {
+            "id": 3040,
+            "width": 683,
+            "height": 1024,
+            "file_name": "COD10K-CAM-4-Amphibian-67-Frog-4760.jpg"
+        }
+    ],
+    "annotations": [
+        {
+            "id": 1,
+            "image_id": 3040,
+            "category_id": 67,
+            "bbox": [
+                258,
+                999,
+                64,
+                664
+            ],
+            "area": 42496,
+            "segmentation": [
+                [
+                    258,
+                    999,
+                    322,
+                    999,
+                    322,
+                    1663,
+                    258,
+                    1663
+                ]
+            ],
+            "iscrowd": 0
+        }
+    ],
+    "categories": [
+        {
+            "id": "67",
+            "name": "Frog",
+            "supercategory": "Frog"
+        }
+    ]
+}

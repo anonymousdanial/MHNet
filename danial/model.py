@@ -11,9 +11,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Model(nn.Module):
-    def __init__(self, config=None):
+    def __init__(self, config=None, num_classes=5):
         super(Model, self).__init__()
         self.config = config
+        self.num_classes = num_classes
         self.build_model()
 
     def build_model(self):
@@ -32,8 +33,8 @@ class Model(nn.Module):
         # PreFCS
         self.pre_fcs = pre_fcs.PreFCS()
         
-        # CRFCS
-        self.crfcs = fcs.CRFCS(roi_channels=64, boundary_channels=64)
+        # CRFCS with configurable number of classes
+        self.crfcs = fcs.CRFCS(roi_channels=64, boundary_channels=64, num_classes=self.num_classes)
 
     def forward(self, x):
         # Get features from backbone
@@ -56,9 +57,11 @@ class Model(nn.Module):
         branch = self.pre_fcs.branch
         
         # CRFCS processing
-        binary_pred, boundary_pred, fused_feat = self.crfcs(roi_out, branch)
+        out = self.crfcs(roi_out, branch)
+
+
         
-        return binary_pred, boundary_pred, fused_feat
+        return out
 
     def summary(self):
         print("Model Components:")

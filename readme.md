@@ -1,1 +1,1 @@
-python3 train.py --batch_size 16 --epochs 800 --device cuda --save-name snap-2
+python3 train.py --batch_size 16 --epochs 10 --device cuda --save-name snap-2

@@ -17,10 +17,11 @@ class CRFCS(nn.Module):
         output_size (int): Size of the output feature map (default: 224)
     """
     
-    def __init__(self, roi_channels=64, boundary_channels=512, output_size=224):
+    def __init__(self, roi_channels=64, boundary_channels=512, output_size=224, num_classes=5):
         super(CRFCS, self).__init__()
         
         self.output_size = output_size
+        self.num_classes = num_classes
         
         # 1x1 convolution to generate masked feature map
         # Use a slightly deeper conv to get more spatial variation
@@ -45,7 +46,8 @@ class CRFCS(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         
         # CI head (classification) - now uses pooled features
-        self.cls_head = nn.Linear(roi_channels * 7 * 7, 5) # 5 refers to number of classes
+        self.cls_head = nn.Linear(roi_channels * 7 * 7, num_classes) # Classification head with dynamic number of classes
+        self.num_queries = 100 
 
         # Reg head (bounding box) - now uses pooled features
         self.reg_head = nn.Linear(roi_channels * 7 * 7, 4)
@@ -57,31 +59,28 @@ class CRFCS(nn.Module):
     def forward(self, roi_features, boundary_features):
         """
         Forward pass of CR/FCS module
-        
         Args:
             roi_features: ROI feature map from deep layer with RPN [B, C, H_roi, W_roi]
-                         e.g., [1, 64, 7, 7]
+                        e.g., [1, 64, 7, 7]
             boundary_features: Boundary features from F5^1 layer [B, C, H_bound, W_bound]
-                              e.g., [1, 64, 56, 56]
-            
+                            e.g., [1, 64, 56, 56]
         Returns:
-            cls_out: Classification predictions [B, num_classes]
-            reg_out: Bounding box regression [B, 4]
-            recovered_features: Feature map with recovered missing cues [B, C, 224, 224]
+            dict with keys:
+                'pred_logits': Classification predictions [B, num_queries, num_classes + 1]
+                'pred_boxes': Bounding box regression [B, num_queries, 4] (normalized cx, cy, w, h)
+                'recovered_features': Feature map with recovered missing cues [B, C, 224, 224]
+                'mask_output': Mask output [B, C_mask, 224, 224]
         """
         B, C, H_roi, W_roi = roi_features.shape
         _, _, H_bound, W_bound = boundary_features.shape
         
         # Step 1: Generate masked feature map M_t (Eq. 5)
-        # This represents the predicted/visible regions
         M_t = self.mask_conv(roi_features)  # [B, 1, 7, 7]
         
         # Step 2: Compute reverse attention map a_t^C (Eq. 5)
-        # Reverse attention highlights non-predicted regions (missing features)
         reverse_attention = 1 - self.sigmoid(M_t)  # [B, 1, 7, 7]
         
         # Step 3: Generate information constraint f_t^C from boundary features
-        # This provides boundary constraints for the reverse attention search
         boundary_constraint = self.boundary_conv(boundary_features)  # [B, 1, 56, 56]
         boundary_constraint = self.sigmoid(boundary_constraint)
         
@@ -94,31 +93,30 @@ class CRFCS(nn.Module):
         )  # [B, 1, 7, 7]
         
         # Step 4: Apply reverse attention with boundary constraints (Eq. 6)
-        # Element-wise multiplication to focus on missing features within boundaries
         constrained_attention = reverse_attention * boundary_constraint
-        
-        # Apply to ROI features
         attended_features = constrained_attention * roi_features
-        
-        # 3x3 convolution to recover missing body features
         x_t = self.recovery_conv(attended_features)
         x_t = self.relu(x_t)
         
         # Step 5: Selective weighted attention for mutual information compensation
-        # Concatenate original ROI features with recovered features
         combined = torch.cat([roi_features, x_t], dim=1)
-        
-        # Generate attention weights
         attention_weights = self.attention_conv(combined)
         attention_weights = self.sigmoid(attention_weights)
-        
-        # Apply weighted combination (still at 7x7)
         recovered_features_7x7 = attention_weights * x_t + (1 - attention_weights) * roi_features
         
-        # For classification and regression heads, use the 7x7 features
-        x_flat = recovered_features_7x7.view(B, -1)
-        cls_out = self.cls_head(x_flat)
-        reg_out = self.reg_head(x_flat)
+        # Flatten features for heads
+        x_flat = recovered_features_7x7.view(B, -1)  # [B, C*7*7]
+        
+        # NEW: Expand features to num_queries
+        # Option 1: Simple repetition (each query gets same features)
+        x_queries = x_flat.unsqueeze(1).repeat(1, self.num_queries, 1)  # [B, num_queries, C*7*7]
+        
+        # Generate predictions for each query
+        pred_logits = self.cls_head(x_queries)  # [B, num_queries, num_classes + 1]
+        pred_boxes = self.reg_head(x_queries)   # [B, num_queries, 4]
+        
+        # IMPORTANT: Apply sigmoid to normalize boxes to [0, 1] range
+        pred_boxes = torch.sigmoid(pred_boxes)
         
         # Upsample recovered features to 224x224
         recovered_features = F.interpolate(
@@ -128,10 +126,16 @@ class CRFCS(nn.Module):
             align_corners=False
         )  # [B, C, 224, 224]
         
-        # Get reduced mask output (parallel to other outputs)
+        # Get reduced mask output
         mask_output = self.mask_reduce(recovered_features)
         
-        return cls_out, reg_out, recovered_features, mask_output
+        # Return DETR-style output dictionary
+        return {
+            'pred_logits': pred_logits,
+            'pred_boxes': pred_boxes,
+            'recovered_features': recovered_features,
+            'mask_output': mask_output
+        }
     
     def get_reverse_attention_map(self, roi_features):
         """

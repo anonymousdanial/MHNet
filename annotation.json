@@ -1,0 +1,44 @@
+{
+    "images": [
+        {
+            "id": 1,
+            "width": 800,
+            "height": 600,
+            "file_name": "COD10K-CAM-1-Aquatic-1-BatFish-1.jpg"
+        }
+    ],
+    "annotations": [
+        {
+            "id": 1,
+            "image_id": 1,
+            "category_id": 1,
+            "bbox": [
+                112,
+                203,
+                552,
+                239
+            ],
+            "area": 131928,
+            "segmentation": [
+                [
+                    112,
+                    203,
+                    664,
+                    203,
+                    664,
+                    442,
+                    112,
+                    442
+                ]
+            ],
+            "iscrowd": 0
+        }
+    ],
+    "categories": [
+        {
+            "id": 1,
+            "name": "BatFish",
+            "supercategory": "BatFish"
+        }
+    ]
+}

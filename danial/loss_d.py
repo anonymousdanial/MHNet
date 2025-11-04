@@ -2,51 +2,43 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SingleMaskLoss(nn.Module):
+class ForegroundBackgroundLoss(nn.Module):
     """
-    For models that output [B, 64, H, W] but predict ONE binary mask.
-    Uses a learnable 1x1 conv to combine 64 channels → then applies BCE + Dice.
+    Rewards activations inside mask, penalizes activations outside mask.
     """
-    def __init__(self, bce_weight=1.0, dice_weight=1.0, smooth=1e-6):
+    def __init__(self, fg_weight=1.0, bg_weight=1.0, smooth=1e-6):
         super().__init__()
-        self.bce_weight = bce_weight
-        self.dice_weight = dice_weight
+        self.fg_weight = fg_weight
+        self.bg_weight = bg_weight
         self.smooth = smooth
-        self.bce = nn.BCEWithLogitsLoss()
 
     def forward(self, logits, target):
         """
-        logits_64: [B, 64, H, W] – raw model output
-        target:    [B, H, W] or [B, 1, H, W] – binary ground truth
+        logits: [B, 1, H, W]  raw model output
+        target: [B, 1, H, W]  binary mask (0/1)
         """
-        # Ensure target is [B, 1, H, W]
-        if target.dim() == 3:
-            target = target.unsqueeze(1).float()
+        prob = torch.sigmoid(logits)
 
-        total = 0.0
+        # Foreground region (where mask == 1)
+        fg = (prob * target).sum() / (target.sum() + self.smooth)
 
-        # BCE with logits
-        if self.bce_weight > 0:
-            total += self.bce_weight * self.bce(logits, target)
+        # Background region (where mask == 0)
+        bg = (prob * (1 - target)).sum() / ((1 - target).sum() + self.smooth)
 
-        # Dice on probabilities
-        if self.dice_weight > 0:
-            prob = torch.sigmoid(logits)
-            intersection = (prob * target).sum(dim=(2, 3))
-            union = prob.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
-            dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
-            total += self.dice_weight * (1.0 - dice.mean())
+        # We want: fg HIGH, bg LOW
+        loss = self.fg_weight * (1 - fg) + self.bg_weight * bg
+        return loss
 
-        return total
 
 # Example usage:
 if __name__ == "__main__":
-    mod_out = torch.randn(16, 64, 224, 224, requires_grad=True)
-    GT = torch.randn(16, 1, 224, 224)
-    criterion = SingleMaskLoss()
-    loss = criterion(mod_out, GT)
-    loss.backward()
+    # Create a fake binary mask
+    GT = torch.randint(0, 2, (16, 1, 224, 224)).float()
+
+    # Generate logits that perfectly match this mask
+    logits = torch.logit(GT.clamp(0.001, 0.999))  # convert to ideal logits
+
+    criterion = ForegroundBackgroundLoss()
+    loss = criterion(logits, GT)
 
     print("Loss:", loss.item())
-    print("Gradient magnitude on output:", mod_out.grad.abs().mean().item())
-    print("Gradient magnitude on reduce weights:", criterion.reduce.weight.grad.abs().mean().item())
