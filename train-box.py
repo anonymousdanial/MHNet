@@ -182,6 +182,10 @@ def main():
     for epoch in range(args.epochs):
         avg_loss = train_one_epoch(net, criterion, optimizer, loader, device, logits_adapter)
         print(f"Epoch {epoch+1}/{args.epochs} - avg_loss: {avg_loss:.4f}")
+        
+        # Save training logs
+        log_path = os.path.join(args.save_dir, 'training_log.csv')
+        save_training_log(log_path, epoch+1, avg_loss, optimizer.param_groups[0]['lr'], best_loss)
 
         # save checkpoint
         ckpt = {
