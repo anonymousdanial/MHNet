@@ -83,6 +83,14 @@ def train_one_epoch(model, criterion, optimizer, dataloader, device, logits_adap
         images = images.to(device)
         targets = build_targets_from_annotations(ann_list)
 
+        # Move target tensors to the same device as the model (important for ops like cdist)
+        for t in targets:
+            if isinstance(t, dict):
+                if 'labels' in t and isinstance(t['labels'], torch.Tensor):
+                    t['labels'] = t['labels'].to(device)
+                if 'boxes' in t and isinstance(t['boxes'], torch.Tensor):
+                    t['boxes'] = t['boxes'].to(device)
+
         # forward
         outputs = model(images)
         
@@ -92,7 +100,7 @@ def train_one_epoch(model, criterion, optimizer, dataloader, device, logits_adap
         print(f"pred_logits shape before adapter: {pred_logits.shape}")
         if logits_adapter is not None:
             pred_logits = logits_adapter(pred_logits)
-            print(f"pred_logits shape after adapter: {pred_logits.shape}")
+            # print(f"pred_logits shape after adapter: {pred_logits.shape}")
             
         mod_out = {
             'pred_logits': pred_logits,

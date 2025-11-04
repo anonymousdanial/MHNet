@@ -26,3 +26,8 @@ def fuyo():
                 count += 1
 
         return f"Total COD10K-CAM images copied: {count}"
+
+
+if __name__ == "__main__":
+    result = fuyo()
+    print(result)
